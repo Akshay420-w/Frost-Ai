@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FROST AI - Interactive Core Panel</title>
+  
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- MediaPipe CDNs -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@500;600;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; touch-action: none; }
+    body, html { 
+      width: 100%; height: 100%; overflow: hidden; 
+      background: #010307; font-family: 'Rajdhani', system-ui, sans-serif; color: #fff; 
+    }
+    #webgl-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+
+    /* HUD OVERLAY & SCI-FI CORNER BRACKETS */
+    .glass-panel {
+      background: rgba(4, 12, 26, 0.75);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(0, 240, 255, 0.22);
+      border-radius: 4px;
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.8), inset 0 0 25px rgba(0, 212, 255, 0.06);
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .glass-panel::before {
+      content: ''; position: absolute; top: 0; left: 0; width: 8px; height: 8px;
+      border-top: 2px solid #00f0ff; border-left: 2px solid #00f0ff;
+    }
+    .glass-panel::after {
+      content: ''; position: absolute; bottom: 0; right: 0; width: 8px; height: 8px;
+      border-bottom: 2px solid #00f0ff; border-right: 2px solid #00f0ff;
+    }
+
+    #ui-container {
+      position: absolute; top: 28px; left: 28px; z-index: 10;
+      padding: 22px; width: 340px; max-width: calc(100vw - 56px);
+    }
+
+    .brand-header {
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid rgba(0, 240, 255, 0.2);
+      padding-bottom: 14px; margin-bottom: 16px;
+    }
+
+    .brand-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.3rem; font-weight: 900;
+      letter-spacing: 3px;
+      background: linear-gradient(135deg, #ffffff 0%, #00f0ff 60%, #0077ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 25px rgba(0, 240, 255, 0.5);
+    }
+
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 0.68rem; font-family: 'Orbitron', sans-serif;
+      padding: 4px 10px; border-radius: 2px;
+      background: rgba(0, 240, 255, 0.08); border: 1px solid rgba(0, 240, 255, 0.35);
+      color: #00f0ff; letter-spacing: 1px;
+    }
+
+    .pulse-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: #00f0ff;
+      box-shadow: 0 0 12px #00f0ff, 0 0 4px #fff; animation: pulse 1.4s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.75); } }
+
+    .hud-row { 
+      font-size: 0.92rem; margin: 10px 0; display: flex; 
+      justify-content: space-between; align-items: center; letter-spacing: 0.8px;
+    }
+    .hud-label { color: #7395c8; font-weight: 600; text-transform: uppercase; font-size: 0.74rem;}
+    .hud-val { 
+      color: #00f0ff; font-family: 'Orbitron', monospace; font-weight: 600; 
+      text-shadow: 0 0 10px rgba(0, 240, 255, 0.5); font-size: 0.85rem;
+    }
+
+    .mode-tag {
+      padding: 2px 8px; border-radius: 2px; font-size: 0.75rem;
+      background: rgba(0, 240, 255, 0.15); color: #00f0ff; border: 1px solid rgba(0, 240, 255, 0.4);
+      letter-spacing: 1px;
+    }
+
+    .hud-btn {
+      width: 100%; margin-top: 16px; padding: 12px;
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.18) 0%, rgba(0, 119, 255, 0.18) 100%);
+      border: 1px solid rgba(0, 240, 255, 0.45);
+      color: #e0f7fa; font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.75rem;
+      border-radius: 2px; cursor: pointer; text-transform: uppercase; letter-spacing: 2px;
+      transition: all 0.25s ease; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+      position: relative; overflow: hidden;
+    }
+    .hud-btn::before {
+      content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.3), transparent);
+      transition: 0.5s;
+    }
+    .hud-btn:hover::before { left: 100%; }
+    .hud-btn:hover { 
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.35) 0%, rgba(0, 119, 255, 0.35) 100%);
+      border-color: #00f0ff;
+      box-shadow: 0 0 25px rgba(0, 240, 255, 0.6); transform: translateY(-1px); color: #fff;
+    }
+
+    #instructions {
+      position: absolute; top: 28px; right: 28px; z-index: 10;
+      padding: 20px; width: 330px; max-width: calc(100vw - 56px); font-size: 0.88rem; line-height: 1.65; color: #8ca0be;
+    }
+    #instructions .title {
+      font-family: 'Orbitron', sans-serif; font-weight: 700; color: #00f0ff;
+      margin-bottom: 10px; text-transform: uppercase; letter-spacing: 2px; font-size: 0.82rem;
+      border-bottom: 1px solid rgba(0,240,255,0.2); padding-bottom: 6px;
+    }
+    #instructions b { color: #ffffff; text-shadow: 0 0 8px rgba(255,255,255,0.5); }
+
+    #webcam-wrapper {
+      position: absolute; bottom: 28px; right: 28px; width: 260px; height: 195px;
+      border-radius: 4px; overflow: hidden; border: 1px solid rgba(0, 240, 255, 0.45);
+      z-index: 10; background: rgba(2, 6, 14, 0.9);
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.85);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #webcam-wrapper::after {
+      content: 'OPTIC FEED // LIVE'; position: absolute; top: 6px; left: 8px;
+      font-family: 'Orbitron', sans-serif; font-size: 0.55rem; color: #00f0ff; letter-spacing: 1px;
+      background: rgba(0, 0, 0, 0.6); padding: 2px 5px; border-radius: 2px;
+      border: 1px solid rgba(0,240,255,0.3); pointer-events: none;
+    }
+    #webcam-wrapper.hidden { opacity: 0; visibility: hidden; pointer-events: none; transform: scale(0.92); }
+    #hidden-video { display: none; }
+    #webcam-canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+
+    body::after {
+      content: ""; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+      background-size: 100% 4px; z-index: 999; pointer-events: none; opacity: 0.6;
+    }
+  </style>
+</head>
+<body>
+  <div id="webgl-container"></div>
+  <div id="ui-container" class="glass-panel">
+    <div class="brand-header">
+      <div class="brand-title">FROST // AI</div>
+      <div class="status-badge"><div class="pulse-dot"></div><span id="status">ONLINE</span></div>
+    </div>
+    <div class="hud-row"><span class="hud-label">Control Mode</span><span class="hud-val mode-tag" id="mode-val">LOCKED</span></div>
+    <div class="hud-row"><span class="hud-label">Hand Link</span><span class="hud-val" id="hands-val">0 DETECTED</span></div>
+    <div class="hud-row"><span class="hud-label">Core Vector (X, Y)</span><span class="hud-val" id="pos-val">0.0, 0.0</span></div>
+    <div class="hud-row"><span class="hud-label">Angular Speed</span><span class="hud-val" id="speed-val">0.00 rad/s</span></div>
+    <div class="hud-row"><span class="hud-label">Rotation Inertia</span><span class="hud-val" id="inertia-val">STABLE</span></div>
+    <button class="hud-btn" id="toggle-cam-btn">TOGGLE OPTIC FEED</button>
+  </div>
+
+  <div id="instructions" class="glass-panel">
+    <div class="title">// GESTURE CONTROL PROTOCOL</div>
+    • <b>Move Sphere:</b> Pinch Right Hand / Mixed State.<br>
+    • <b>Natural Spin:</b> Hold <b>2 Open Hands</b> & Move them.<br>
+    • <b>Scale Core:</b> Pinch 2 Hands & Pull/Push.<br>
+    • <b>Lock Position:</b> Release Gestures.
+  </div>
+
+  <div id="webcam-wrapper">
+    <canvas id="webcam-canvas"></canvas>
+  </div>
+  <video id="hidden-video" playsinline webkit-playsinline></video>
+
+  <script>
+    const container = document.getElementById('webgl-container');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x010307, 0.015);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 0, 7.5);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.35;
+    container.appendChild(renderer.domElement);
+
+    const ambientLight = new THREE.AmbientLight(0x004488, 2.0);
+    scene.add(ambientLight);
+
+    const coreLight = new THREE.PointLight(0x00f0ff, 4, 10);
+    coreLight.position.set(0, 0, 0);
+    scene.add(coreLight);
+
+    const sphereGroup = new THREE.Group();
+    scene.add(sphereGroup);
+
+    const innerCoreMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const innerCoreMesh = new THREE.Mesh(new THREE.SphereGeometry(0.35, 32, 32), innerCoreMat);
+    sphereGroup.add(innerCoreMesh);
+
+    const coreVertexShader = `
+      varying vec3 vNormal;
+      varying vec3 vWorldPosition;
+      varying vec2 vUv;
+      uniform float uTime;
+      uniform float uPulse;
+
+      void main() {
+        vUv = uv;
+        vNormal = normalize(normalMatrix * normal);
+        vec3 pos = position;
+        float wave = sin(pos.x * 8.0 + uTime * 3.0) * cos(pos.y * 8.0 + uTime * 3.0) * 0.05;
+        pos += normal * (wave + uPulse * 0.12);
+
+        vec4 worldPos = modelMatrix * vec4(pos, 1.0);
+        vWorldPosition = worldPos.xyz;
+        gl_Position = projectionMatrix * viewMatrix * worldPos;
+      }
+    `;
+
+    const coreFragmentShader = `
+      varying vec3 vNormal;
+      varying vec3 vWorldPosition;
+      varying vec2 vUv;
+      uniform float uTime;
+      uniform vec3 uColor;
+
+      void main() {
+        vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+        float fresnel = pow(1.0 - max(dot(viewDir, vNormal), 0.0), 2.2);
+        float gridX = step(0.9, fract(vUv.x * 28.0 + uTime * 0.1));
+        float gridY = step(0.9, fract(vUv.y * 14.0 - uTime * 0.1));
+        float grid = max(gridX, gridY);
+
+        vec3 baseColor = uColor * 0.35;
+        vec3 gridColor = vec3(0.7, 0.98, 1.0) * grid * 2.2;
+        vec3 fresnelColor = uColor * fresnel * 2.5;
+
+        vec3 finalColor = baseColor + gridColor + fresnelColor;
+        gl_FragColor = vec4(finalColor, 0.88);
+      }
+    `;
+
+    const coreUniforms = {
+      uTime: { value: 0 },
+      uPulse: { value: 0 },
+      uColor: { value: new THREE.Color(0x00f0ff) }
+    };
+
+    const coreMaterial = new THREE.ShaderMaterial({
+      vertexShader: coreVertexShader,
+      fragmentShader: coreFragmentShader,
+      uniforms: coreUniforms,
+      transparent: true,
+      side: THREE.DoubleSide
+    });
+
+    const mainCoreMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(1.25, 4), coreMaterial);
+    sphereGroup.add(mainCoreMesh);
+
+    const wireframeMat = new THREE.MeshBasicMaterial({ 
+      color: 0x00f0ff, wireframe: true, transparent: true, opacity: 0.45 
+    });
+    const wireframeShell = new THREE.Mesh(new THREE.IcosahedronGeometry(1.4, 2), wireframeMat);
+    sphereGroup.add(wireframeShell);
+
+    const outerShellMat = new THREE.MeshBasicMaterial({ 
+      color: 0x0077ff, wireframe: true, transparent: true, opacity: 0.2 
+    });
+    const outerShell = new THREE.Mesh(new THREE.IcosahedronGeometry(1.65, 2), outerShellMat);
+    sphereGroup.add(outerShell);
+
+    const ringGroup = new THREE.Group();
+    sphereGroup.add(ringGroup);
+
+    const ringMat1 = new THREE.MeshBasicMaterial({ color: 0x00f0ff, wireframe: true, transparent: true, opacity: 0.6 });
+    const ring1 = new THREE.Mesh(new THREE.TorusGeometry(1.9, 0.015, 16, 100), ringMat1);
+    ring1.rotation.x = Math.PI / 3;
+    ringGroup.add(ring1);
+
+    const ringMat2 = new THREE.MeshBasicMaterial({ color: 0x00aaff, wireframe: true, transparent: true, opacity: 0.5 });
+    const ring2 = new THREE.Mesh(new THREE.TorusGeometry(2.15, 0.012, 16, 100), ringMat2);
+    ring2.rotation.y = Math.PI / 4;
+    ringGroup.add(ring2);
+
+    const nodeGeo = new THREE.BufferGeometry();
+    const nodePositions = [];
+    const baseGeo = new THREE.IcosahedronGeometry(1.25, 1);
+    const posArr = baseGeo.attributes.position.array;
+    for(let i=0; i<posArr.length; i+=3) {
+      nodePositions.push(posArr[i], posArr[i+1], posArr[i+2]);
+    }
+    nodeGeo.setAttribute('position', new THREE.Float32BufferAttribute(nodePositions, 3));
+
+    const nodeMat = new THREE.PointsMaterial({
+      size: 0.09, color: 0xffffff, transparent: true, opacity: 0.95
+    });
+    const crystalNodes = new THREE.Points(nodeGeo, nodeMat);
+    sphereGroup.add(crystalNodes);
+
+    const particleCount = 5000;
+    const particleGeo = new THREE.BufferGeometry();
+    const particlePositions = new Float32Array(particleCount * 3);
+    const particlePhis = new Float32Array(particleCount);
+
+    for (let i = 0; i < particleCount; i++) {
+      const u = Math.random();
+      const v = Math.random();
+      const theta = u * 2.0 * Math.PI;
+      const phi = Math.acos(2.0 * v - 1.0);
+      const r = 1.8 + Math.random() * 0.8;
+
+      particlePositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      particlePositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      particlePositions[i * 3 + 2] = r * Math.cos(phi);
+      particlePhis[i] = Math.random() * Math.PI * 2;
+    }
+
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+    particleGeo.setAttribute('aPhi', new THREE.BufferAttribute(particlePhis, 1));
+
+    const particleVertexShader = `
+      attribute float aPhi;
+      uniform float uTime;
+      varying float vAlpha;
+
+      void main() {
+        vec3 pos = position;
+        float angle = uTime * 0.4 + aPhi;
+        float c = cos(angle);
+        float s = sin(angle);
+        mat2 rot = mat2(c, -s, s, c);
+        pos.xz = rot * pos.xz;
+
+        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+        gl_PointSize = (0.07 / -mvPosition.z) * 320.0;
+        gl_Position = projectionMatrix * mvPosition;
+        vAlpha = sin(uTime * 2.5 + aPhi) * 0.35 + 0.65;
+      }
+    `;
+
+    const particleFragmentShader = `
+      varying float vAlpha;
+      uniform vec3 uColor;
+
+      void main() {
+        float dist = length(gl_PointCoord - vec2(0.5));
+        if (dist > 0.5) discard;
+        gl_FragColor = vec4(uColor, (1.0 - dist * 2.0) * vAlpha);
+      }
+    `;
+
+    const particleUniforms = {
+      uTime: { value: 0 },
+      uColor: { value: new THREE.Color(0x00f0ff) }
+    };
+
+    const particleSystem = new THREE.Points(
+      particleGeo, 
+      new THREE.ShaderMaterial({
+        vertexShader: particleVertexShader,
+        fragmentShader: particleFragmentShader,
+        uniforms: particleUniforms,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    sphereGroup.add(particleSystem);
+
+    const targetState = {
+      pos: new THREE.Vector3(0, 0, 0),
+      scale: 1.0,
+      targetColor: new THREE.Color(0x00f0ff)
+    };
+
+    let angularVelocity = new THREE.Vector3(0, 0, 0);
+    const dampingFactor = 3.5;
+
+    let anchorMove = null;
+    let anchorScale = null;
+    let rotateState = null;
+
+    const handPinchStates = [false, false];
+    const prevDist3D = [0, 0];
+    let smoothedHands = [];
+
+    let activeMode = 'NONE';
+    let pendingMode = 'NONE';
+    let modeLockCounter = 0;
+    const MODE_LOCK_THRESHOLD = 2;
+
+    function dist2D(p1, p2) {
+      return Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    }
+
+    function evaluatePinch(lm, handIdx) {
+      if (!lm || !lm[4] || !lm[8] || !lm[0] || !lm[9]) return false;
+      const dx = lm[4].x - lm[8].x;
+      const dy = lm[4].y - lm[8].y;
+      const dz = (lm[4].z - lm[8].z) * 0.5;
+      const rawDist3D = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+      const handSize = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y) || 0.2;
+      const normDist = rawDist3D / handSize;
+
+      const isCurrentlyPinching = handPinchStates[handIdx];
+      const distDelta = normDist - (prevDist3D[handIdx] || normDist);
+      prevDist3D[handIdx] = normDist;
+
+      if (!isCurrentlyPinching && normDist < 0.22) {
+        handPinchStates[handIdx] = true;
+      } else if (isCurrentlyPinching && (normDist > 0.32 || distDelta > 0.04)) {
+        handPinchStates[handIdx] = false;
+      }
+
+      return handPinchStates[handIdx];
+    }
+
+    function getHandCenter(lm) { return { x: lm[9].x, y: lm[9].y }; }
+    function getPinchCenter(lm) { return { x: (lm[4].x + lm[8].x) / 2, y: (lm[4].y + lm[8].y) / 2 }; }
+
+    function smoothLandmarks(rawHands) {
+      if (!rawHands) return [];
+      return rawHands.map((hand, hIdx) => {
+        if (!hand) return null;
+        if (!smoothedHands[hIdx]) {
+          return hand.map(pt => (pt ? { ...pt } : { x: 0, y: 0, z: 0 }));
+        }
+        return hand.map((pt, pIdx) => {
+          if (!pt) return { x: 0, y: 0, z: 0 };
+          const prevPt = smoothedHands[hIdx] ? smoothedHands[hIdx][pIdx] : null;
+          if (!prevPt) return { ...pt };
+          return {
+            x: prevPt.x + (pt.x - prevPt.x) * 0.4,
+            y: prevPt.y + (pt.y - prevPt.y) * 0.4,
+            z: prevPt.z + (pt.z - prevPt.z) * 0.4
+          };
+        });
+      }).filter(Boolean);
+    }
+
+    const videoElement = document.getElementById('hidden-video');
+    const canvasElement = document.getElementById('webcam-canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const webcamWrapper = document.getElementById('webcam-wrapper');
+    const toggleBtn = document.getElementById('toggle-cam-btn');
+
+    toggleBtn.addEventListener('click', () => {
+      webcamWrapper.classList.toggle('hidden');
+      toggleBtn.innerText = webcamWrapper.classList.contains('hidden') ? 'OPEN OPTIC FEED' : 'TOGGLE OPTIC FEED';
+    });
+
+    function onResults(results) {
+      canvasElement.width = videoElement.videoWidth || 1280;
+      canvasElement.height = videoElement.videoHeight || 720;
+
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      const rawHands = results.multiHandLandmarks;
+      document.getElementById('hands-val').innerText = rawHands ? `${rawHands.length} DETECTED` : "0 DETECTED";
+
+      if (rawHands && rawHands.length > 0) {
+        document.getElementById('status').innerText = "LINK ACTIVE";
+
+        rawHands.forEach((landmarks) => {
+          if (landmarks) {
+            drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00f0ff', lineWidth: 2 });
+            drawLandmarks(canvasCtx, landmarks, { color: '#ffffff', lineWidth: 1, radius: 3 });
+          }
+        });
+
+        smoothedHands = smoothLandmarks(rawHands);
+        const numHands = smoothedHands.length;
+
+        let rightHand = null;
+        let leftHand = null;
+
+        smoothedHands.forEach((hand) => {
+          const wristX = hand[0].x;
+          if (wristX < 0.5) { rightHand = hand; } else { leftHand = hand; }
+        });
+        const h1 = numHands > 0 ? smoothedHands[0] : null;
+        const h2 = numHands > 1 ? smoothedHands[1] : null;
+
+        const h1Pinch = h1 ? evaluatePinch(h1, 0) : false;
+        const h2Pinch = h2 ? evaluatePinch(h2, 1) : false;
+        const pinchedCount = (h1Pinch ? 1 : 0) + (h2Pinch ? 1 : 0);
+
+        let detectedMode = 'LOCKED';
+
+        if (numHands === 2) {
+          if (pinchedCount === 2) { detectedMode = 'SCALE'; } 
+          else if (pinchedCount === 0) { detectedMode = 'ROTATE'; } 
+          else { detectedMode = 'MOVE'; }
+        } else if (numHands === 1) {
+          if (h1Pinch) detectedMode = 'MOVE';
+        }
+
+        if (detectedMode !== pendingMode) {
+          pendingMode = detectedMode;
+          modeLockCounter = 0;
+        } else {
+          modeLockCounter++;
+          if (modeLockCounter >= MODE_LOCK_THRESHOLD) {
+            if (activeMode !== pendingMode) {
+              activeMode = pendingMode;
+              anchorMove = null;
+              anchorScale = null;
+              rotateState = null;
+            }
+          }
+        }
+
+        if (activeMode === 'SCALE' && h1 && h2) {
+          document.getElementById('mode-val').innerText = "DUAL SCALE";
+          targetState.targetColor.setHex(0xffaa00);
+          const p1 = getPinchCenter(h1);
+          const p2 = getPinchCenter(h2);
+          const currentDist = dist2D(p1, p2);
+
+          if (!anchorScale) {
+            anchorScale = { dist: currentDist, baseScale: sphereGroup.scale.x };
+          } else {
+            const safeAnchorDist = Math.max(anchorScale.dist, 0.05);
+            const linearRatio = currentDist / safeAnchorDist;
+            targetState.scale = THREE.MathUtils.clamp(anchorScale.baseScale * Math.pow(linearRatio, 2.0), 0.4, 3.2);
+          }
+        } else if (activeMode === 'ROTATE' && h1 && h2) {
+          document.getElementById('mode-val').innerText = "NATURAL SPIN";
+          targetState.targetColor.setHex(0xbc13fe);
+
+          const c1 = getHandCenter(h1);
+          const c2 = getHandCenter(h2);
+
+          if (!rotateState) {
+            rotateState = {
+              lastMid: { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 },
+              lastVector: { x: c2.x - c1.x, y: c2.y - c1.y }
+            };
+          } else {
+            const currentMid = { x: (c1.x + c2.x) / 2, y: (c1.y + c2.y) / 2 };
+            const dx = (currentMid.x - rotateState.lastMid.x) * 12.0;
+            const dy = (currentMid.y - rotateState.lastMid.y) * 12.0;
+
+            angularVelocity.x = dy * 16.0;
+            angularVelocity.y = -dx * 16.0;
+
+            rotateState.lastMid = currentMid;
+          }
+        } else if (activeMode === 'MOVE') {
+          document.getElementById('mode-val').innerText = "TRANSLATE";
+          targetState.targetColor.setHex(0x00f0ff);
+          const moveHand = rightHand || h1;
+          const pinchPos = getPinchCenter(moveHand);
+
+          if (!anchorMove) {
+            anchorMove = {
+              pinch: pinchPos,
+              basePos: new THREE.Vector3(sphereGroup.position.x, sphereGroup.position.y, sphereGroup.position.z)
+            };
+          } else {
+            const dx = (anchorMove.pinch.x - pinchPos.x) * 14.0;
+            const dy = (anchorMove.pinch.y - pinchPos.y) * 10.0;
+            targetState.pos.x = anchorMove.basePos.x + dx;
+            targetState.pos.y = anchorMove.basePos.y + dy;
+          }
+        } else {
+          document.getElementById('mode-val').innerText = "MOMENTUM GLIDE";
+          targetState.targetColor.setHex(0x00f0ff);
+          handPinchStates[0] = false; handPinchStates[1] = false;
+          anchorMove = null; anchorScale = null; rotateState = null;
+        }
+
+      } else {
+        document.getElementById('status').innerText = "SEARCHING";
+        document.getElementById('mode-val').innerText = "STANDBY";
+        targetState.targetColor.setHex(0x00f0ff);
+        activeMode = 'NONE'; pendingMode = 'NONE'; smoothedHands = []; rotateState = null;
+      }
+
+      canvasCtx.restore();
+    }
+
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
+    });
+    hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    hands.onResults(onResults);
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false
+        });
+        videoElement.srcObject = stream;
+        await videoElement.play();
+
+        async function processFrame() {
+          if (!videoElement.paused && !videoElement.ended) {
+            await hands.send({ image: videoElement });
+          }
+          requestAnimationFrame(processFrame);
+        }
+        processFrame();
+      } catch (err) {
+        console.error("Camera access failed:", err);
+        document.getElementById('status').innerText = "CAM ERROR";
+      }
+    }
+    startCamera();
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const dt = Math.min(clock.getDelta(), 0.1);
+      const elapsedTime = clock.getElapsedTime();
+
+      sphereGroup.position.x += (targetState.pos.x - sphereGroup.position.x) * 0.15;
+      sphereGroup.position.y += (targetState.pos.y - sphereGroup.position.y) * 0.15;
+      
+      const currentScale = sphereGroup.scale.x + (targetState.scale - sphereGroup.scale.x) * 0.15;
+      sphereGroup.scale.set(currentScale, currentScale, currentScale);
+
+      ring1.rotation.z = elapsedTime * 0.6;
+      ring2.rotation.z = -elapsedTime * 0.4;
+
+      if (activeMode !== 'ROTATE') {
+        angularVelocity.multiplyScalar(Math.max(0, 1.0 - dampingFactor * dt));
+      }
+
+      const speed = angularVelocity.length();
+
+      if (speed > 0.001) {
+        const rotAxis = angularVelocity.clone().normalize();
+        const rotAngle = speed * dt;
+        const deltaQuat = new THREE.Quaternion().setFromAxisAngle(rotAxis, rotAngle);
+        sphereGroup.quaternion.premultiply(deltaQuat);
+      } else if (activeMode !== 'ROTATE') {
+        const idleQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0.2, 1, 0).normalize(), 0.0025);
+        sphereGroup.quaternion.multiply(idleQuat);
+      }
+
+      coreUniforms.uTime.value = elapsedTime;
+      coreUniforms.uPulse.value = (activeMode === 'SCALE') ? Math.sin(elapsedTime * 10.0) * 0.5 + 0.5 : 0;
+      coreUniforms.uColor.value.lerp(targetState.targetColor, 0.08);
+
+      particleUniforms.uTime.value = elapsedTime;
+      particleUniforms.uColor.value.lerp(targetState.targetColor, 0.08);
+
+      wireframeMat.color.lerp(targetState.targetColor, 0.08);
+      outerShellMat.color.lerp(targetState.targetColor, 0.08);
+      ringMat1.color.lerp(targetState.targetColor, 0.08);
+      ringMat2.color.lerp(targetState.targetColor, 0.08);
+      coreLight.color.lerp(targetState.targetColor, 0.08);
+
+      document.getElementById('pos-val').innerText = `${sphereGroup.position.x.toFixed(1)}, ${sphereGroup.position.y.toFixed(1)}`;
+      document.getElementById('speed-val').innerText = `${speed.toFixed(2)} rad/s`;
+      document.getElementById('inertia-val').innerText = speed > 0.05 ? "GLIDING" : "STABLE";
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
