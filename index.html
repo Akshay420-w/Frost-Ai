@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FROST AI - Interactive Core Panel</title>
-  
+
   <!-- Three.js CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <!-- MediaPipe CDNs -->
@@ -32,7 +32,7 @@
       box-shadow: 0 16px 50px rgba(0, 0, 0, 0.8), inset 0 0 25px rgba(0, 212, 255, 0.06);
       position: relative;
       overflow: hidden;
-      transition: all 0.3s ease;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .glass-panel::before {
@@ -96,7 +96,7 @@
     }
 
     .hud-btn {
-      width: 100%; margin-top: 16px; padding: 12px;
+      width: 100%; margin-top: 10px; padding: 12px;
       background: linear-gradient(135deg, rgba(0, 240, 255, 0.18) 0%, rgba(0, 119, 255, 0.18) 100%);
       border: 1px solid rgba(0, 240, 255, 0.45);
       color: #e0f7fa; font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 0.75rem;
@@ -132,7 +132,7 @@
       border-radius: 4px; overflow: hidden; border: 1px solid rgba(0, 240, 255, 0.45);
       z-index: 10; background: rgba(2, 6, 14, 0.9);
       box-shadow: 0 10px 35px rgba(0, 0, 0, 0.85);
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
     #webcam-wrapper::after {
       content: 'OPTIC FEED // LIVE'; position: absolute; top: 6px; left: 8px;
@@ -144,6 +144,39 @@
     #hidden-video { display: none; }
     #webcam-canvas { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 
+    /* UTILITY CLASS FOR FULLSCREEN MODE */
+    .hud-hidden {
+      opacity: 0 !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+      transform: scale(0.95);
+    }
+
+    /* SMALL RESTORE BUTTON FOR FULLSCREEN MODE */
+    #restore-ui-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      z-index: 100;
+      padding: 8px 14px;
+      font-size: 0.68rem;
+      letter-spacing: 1px;
+      border-radius: 2px;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: all 0.3s ease;
+    }
+    #restore-ui-btn.visible {
+      opacity: 0.85;
+      visibility: visible;
+      pointer-events: auto;
+    }
+    #restore-ui-btn.visible:hover {
+      opacity: 1;
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.8);
+    }
+
     body::after {
       content: ""; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
       background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
@@ -153,6 +186,8 @@
 </head>
 <body>
   <div id="webgl-container"></div>
+
+  <!-- MAIN STATUS PANEL -->
   <div id="ui-container" class="glass-panel">
     <div class="brand-header">
       <div class="brand-title">FROST // AI</div>
@@ -164,8 +199,10 @@
     <div class="hud-row"><span class="hud-label">Angular Speed</span><span class="hud-val" id="speed-val">0.00 rad/s</span></div>
     <div class="hud-row"><span class="hud-label">Rotation Inertia</span><span class="hud-val" id="inertia-val">STABLE</span></div>
     <button class="hud-btn" id="toggle-cam-btn">TOGGLE OPTIC FEED</button>
+    <button class="hud-btn" id="fullscreen-btn">FULL SCREEN MODE</button>
   </div>
 
+  <!-- INSTRUCTIONS PANEL -->
   <div id="instructions" class="glass-panel">
     <div class="title">// GESTURE CONTROL PROTOCOL</div>
     • <b>Move Sphere:</b> Pinch Right Hand / Mixed State.<br>
@@ -174,10 +211,14 @@
     • <b>Lock Position:</b> Release Gestures.
   </div>
 
+  <!-- WEBCAM FEED -->
   <div id="webcam-wrapper">
     <canvas id="webcam-canvas"></canvas>
   </div>
   <video id="hidden-video" playsinline webkit-playsinline></video>
+
+  <!-- SMALL BUTTON SHOWN ONLY IN FULLSCREEN HIDE MODE -->
+  <button id="restore-ui-btn" class="hud-btn glass-panel">EXIT FULL SCREEN</button>
 
   <script>
     const container = document.getElementById('webgl-container');
@@ -455,10 +496,59 @@
     const canvasCtx = canvasElement.getContext('2d');
     const webcamWrapper = document.getElementById('webcam-wrapper');
     const toggleBtn = document.getElementById('toggle-cam-btn');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    const restoreBtn = document.getElementById('restore-ui-btn');
+    const uiContainer = document.getElementById('ui-container');
+    const instructionsPanel = document.getElementById('instructions');
 
     toggleBtn.addEventListener('click', () => {
       webcamWrapper.classList.toggle('hidden');
       toggleBtn.innerText = webcamWrapper.classList.contains('hidden') ? 'OPEN OPTIC FEED' : 'TOGGLE OPTIC FEED';
+    });
+
+    /* --- FULL SCREEN LOGIC --- */
+    function enterCustomFullscreen() {
+      // Trigger native browser fullscreen
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(err => console.log(err));
+      } else if (document.documentElement.webkitRequestFullscreen) {
+        document.documentElement.webkitRequestFullscreen();
+      }
+
+      // Hide panels
+      uiContainer.classList.add('hud-hidden');
+      instructionsPanel.classList.add('hud-hidden');
+      webcamWrapper.classList.add('hud-hidden');
+
+      // Show small restore button
+      restoreBtn.classList.add('visible');
+    }
+
+    function exitCustomFullscreen() {
+      // Exit browser fullscreen
+      if (document.exitFullscreen && document.fullscreenElement) {
+        document.exitFullscreen().catch(err => console.log(err));
+      } else if (document.webkitExitFullscreen && document.webkitFullscreenElement) {
+        document.webkitExitFullscreen();
+      }
+
+      // Show panels again
+      uiContainer.classList.remove('hud-hidden');
+      instructionsPanel.classList.remove('hud-hidden');
+      webcamWrapper.classList.remove('hud-hidden');
+
+      // Hide restore button
+      restoreBtn.classList.remove('visible');
+    }
+
+    fullscreenBtn.addEventListener('click', enterCustomFullscreen);
+    restoreBtn.addEventListener('click', exitCustomFullscreen);
+
+    // Synchronize UI if the user exits fullscreen using Esc key
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement) {
+        exitCustomFullscreen();
+      }
     });
 
     function onResults(results) {
@@ -633,7 +723,7 @@
 
       sphereGroup.position.x += (targetState.pos.x - sphereGroup.position.x) * 0.15;
       sphereGroup.position.y += (targetState.pos.y - sphereGroup.position.y) * 0.15;
-      
+
       const currentScale = sphereGroup.scale.x + (targetState.scale - sphereGroup.scale.x) * 0.15;
       sphereGroup.scale.set(currentScale, currentScale, currentScale);
 
